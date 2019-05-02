@@ -2,13 +2,20 @@ from rocket_lander.environments.rocketlander import RocketLander
 from rocket_lander.constants import LEFT_GROUND_CONTACT, RIGHT_GROUND_CONTACT
 from algorithms.Random import RandomAgent
 
+'''
+Class: RocketRunner
+-------------------
+Manages test- and train-time simulations for the SpaceX rocket lander environment. Agents, 
+environment settings, and learning settings can be changed in the appropriate config files
+'''
 class RocketRunner(object):
-	def __init__(self, agent, mode, num_episodes, render, settings):
+	def __init__(self, agent, agent_config, mode, num_episodes, render, settings):
 		self.mode = mode
 		self.num_episodes = num_episodes
 		self.render = render
 		self.env = RocketLander(settings)
-		self.agent = agent(self.env)
+		agent_config["env"] = self.env
+		self.agent = agent(**agent_config)
 
 	def simulate(self):
 		if self.mode == "train":
@@ -16,7 +23,7 @@ class RocketRunner(object):
 		elif self.mode == "test":
 			self.simulate_test()
 		else:
-			raise ValueError("Invalid simulation mode: must be one of [train] or [test]")
+			raise KeyError("Invalid simulation mode: must be one of [train] or [test]")
 		
 	def simulate_train(self):
 		pass
@@ -52,13 +59,16 @@ if __name__ == "__main__":
 	    'Initial Force' : 'random'
 	}
 
-	config = {
+	agent_config = {}
+
+	args = {
 		"agent" : RandomAgent, 
 		"mode" : "test", 
 		"num_episodes" : 10, 
 		"render" : True, 
-		"settings" : settings
+		"settings" : settings, 
+		"agent_config" : agent_config
 	}
 
-	runner = RocketRunner(**config)
+	runner = RocketRunner(**args)
 	runner.simulate()
