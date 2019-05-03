@@ -6,20 +6,27 @@ sys.path.insert(0,parentdir)
 from algorithms.Random import RandomAgent
 
 class TDAgent(object):
-	def __init__(self, env, exp, lr, discount, epsilon, epsilon_decay, predictor):
+	def __init__(self, env, lr, discount, \
+			epsilon_start, epsilon_min, epsilon_decay):
 		self.env = env
-		self.exp = exp
-		self.learning_rate = lr
+		self.lr = lr
 		self.discount_rate = discount
-		self.epsilon = epsilon
+		self.epsilon = epsilon_start
+		self.epsilon_min = epsilon_min
 		self.epsilon_decay = epsilon_decay
-		self.predictor = predictor
 		self.sampler = RandomAgent(self.env)
 
+	def zero_epsilon(self):
+		self.epsilon = 0
+
 	def epsilon_greedy_action(self, s):
-		if np.random.rand() < self.epsilon:
+		if np.random.rand() <= self.epsilon:
 			return self.sampler.next_action(s)
 		return self.next_action(s)
 
 	def anneal_epsilon(self):
-		self.epsilon *= self.epsilon_decay
+		if (self.epsilon > self.epsilon_min):
+			self.epsilon *= (1 - self.epsilon_decay)
+
+	def next_action(self, s):
+		pass
