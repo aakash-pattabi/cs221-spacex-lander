@@ -7,13 +7,14 @@ from algorithms.Random import RandomAgent
 
 class TDAgent(object):
 	def __init__(self, env, lr, discount, \
-			epsilon_start, epsilon_min, epsilon_decay):
+			epsilon_start, epsilon_min, epsilon_decay, print_debug):
 		self.env = env
 		self.lr = lr
 		self.discount_rate = discount
 		self.epsilon = epsilon_start
 		self.epsilon_min = epsilon_min
 		self.epsilon_decay = epsilon_decay
+		self.print_debug = print_debug
 		self.sampler = RandomAgent(self.env)
 
 	def zero_epsilon(self):

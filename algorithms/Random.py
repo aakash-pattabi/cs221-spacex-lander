@@ -13,5 +13,5 @@ class RandomAgent(object):
 		main_thrust = np.random.rand()
 		side_thrust = 2*np.random.rand() - 1
 		nozzle = 2*NOZZLE_ANGLE_LIMIT*np.random.rand() - NOZZLE_ANGLE_LIMIT
-		return([main_thrust, side_thrust, nozzle])
+		return np.array([main_thrust, side_thrust, nozzle])
 		
