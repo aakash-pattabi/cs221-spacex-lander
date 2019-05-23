@@ -10,14 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F 
 import torch.optim as optim
 import random
-
-# Given matrix a, return a matrix consisting of the values 
-# in a mapped to their closest values in a
-def get_closest(a, b):
-	c = np.abs(a[:, None] - b[None, :])
-	mins = np.argmin(c, axis = 1)
-	out = np.take(b, mins)
-	return out
+from tensorboardX import SummaryWriter
 
 # Cartesian product of three np.arrays
 def three_cartesian_product(a, b, c): 
@@ -32,9 +25,10 @@ buffer by removing [drop] percent of the samples after evory network update to
 prevent old data from skewing the training data distribution. 
 '''
 class ReplayBuffer(object):
-	def __init__(self, warmup, minibatch_size):
+	def __init__(self, warmup, minibatch_size, device):
 		self.warmup = warmup
 		self.minibatch_size = minibatch_size
+		self.device = device	# Used for tensor-create operations
 		self.buffer = []
 		self.size = 0
 
@@ -44,10 +38,10 @@ class ReplayBuffer(object):
 
 	def sample(self):
 		tuples = random.sample(self.buffer, self.minibatch_size)
-		s = np.stack([tuples[i][0] for i in range(self.minibatch_size)], axis = 0)
-		a = np.stack([tuples[i][1] for i in range(self.minibatch_size)], axis = 0)
-		r = np.array([tuples[i][2] for i in range(self.minibatch_size)])
-		sp = np.stack([tuples[i][3] for i in range(self.minibatch_size)], axis = 0)
+		s = torch.Tensor([tuples[i][0] for i in range(self.minibatch_size)], device = self.device)
+		a = torch.Tensor([tuples[i][1] for i in range(self.minibatch_size)], device = self.device)
+		r = torch.Tensor([tuples[i][2] for i in range(self.minibatch_size)], device = self.device)
+		sp = torch.Tensor([tuples[i][3] for i in range(self.minibatch_size)], device = self.device)
 		return s, a, r, sp
 
 	def clean(self, drop):
@@ -59,8 +53,8 @@ class ReplayBuffer(object):
 Class: PrioritizedReplayBuffer
 '''
 class PrioritizedReplayBuffer(ReplayBuffer):
-	def __init__(self, warmup, minibatch_size):
-		super().__init__(warmup, minibatch_size)
+	def __init__(self, warmup, minibatch_size, device):
+		super().__init__(warmup, minibatch_size, device)
 		self.priorities = []
 
 	def push(self, s, a, r, sp):
@@ -74,10 +68,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 		p /= np.sum(p)
 		indices = np.random.choice(self.size, size = self.minibatch_size, p = p)
 		tuples = [self.buffer[i] for i in indices]
-		s = np.stack([tuples[i][0] for i in range(self.minibatch_size)], axis = 0)
-		a = np.stack([tuples[i][1] for i in range(self.minibatch_size)], axis = 0)
-		r = np.array([tuples[i][2] for i in range(self.minibatch_size)])
-		sp = np.stack([tuples[i][3] for i in range(self.minibatch_size)], axis = 0)
+		s = torch.Tensor([tuples[i][0] for i in range(self.minibatch_size)], device = self.device)
+		a = torch.Tensor([tuples[i][1] for i in range(self.minibatch_size)], device = self.device)
+		r = torch.Tensor([tuples[i][2] for i in range(self.minibatch_size)], device = self.device)
+		sp = torch.Tensor([tuples[i][3] for i in range(self.minibatch_size)], device = self.device)
 		return s, a, r, sp
 
 	def clean(self, drop):
@@ -105,34 +99,32 @@ class DiscretizedQAgent(TDAgent):
 		self.main_thrust_buckets = np.array(disc_buckets["main_thrust"])
 		self.side_thrust_buckets = np.array(disc_buckets["side_thrust"])
 		self.nozzle_buckets = np.array(disc_buckets["nozzle"])
+
+		# Function appoximators
 		self.action_network = predictor.to(self.device)
 		self.target_network = predictor.to(self.device)
 		self.copy_network_parameters()
-		self.tau = tau
-		self.optimizer = optimizer(self.action_network.parameters(), lr = self.lr)
-		self.minibatch_size = minibatch_size
-		self.actions_mat = None
-		self.__init_actions()
-		self.n_steps = 0
-		self.buffer = PrioritizedReplayBuffer(1000, minibatch_size)
 
-	def __init_actions(self):
+		# Hyperparameters and optimizer; [tau] is the number of _environment steps_ until
+		# parameter copies b/w the target and actor networks (~100 steps/episode in SpaceX rocket env)
+		self.tau = tau
+		self.minibatch_size = minibatch_size
+		self.optimizer = optimizer(self.action_network.parameters(), lr = self.lr)
+
+		# Interpretable mapping of action indices to 3-tuple actions
+		self.actions_mat = None
+		self._init_actions()
+
+		# Data and counting variables
+		self.n_steps = 0
+		self.buffer = ReplayBuffer(1000, minibatch_size, self.device)
+
+		# Logger for TensorboardX
+		self.writer = SummaryWiter()
+
+	def _init_actions(self):
 		self.actions_mat = three_cartesian_product(self.main_thrust_buckets, \
 			self.side_thrust_buckets, self.nozzle_buckets)
-
-	def compute_bucket_assignments(self, a):
-		main_thrust = get_closest(a[:,0], self.main_thrust_buckets)
-		side_thrust = get_closest(a[:,1], self.side_thrust_buckets)
-		nozzle = get_closest(a[:,2], self.nozzle_buckets)
-		out = np.zeros((a.shape[0], 3))
-		out[:,0] = main_thrust; out[:,1] = side_thrust; out[:,2] = nozzle
-		return out
-
-	def get_action_indices(self, a):
-		a = self.compute_bucket_assignments(a)
-		idx = [np.where(np.all(self.actions_mat == act, axis = 1))[0][0] \
-			for act in a]
-		return np.array(idx)
 
 	def next_action(self, s):
 		with torch.no_grad():
@@ -140,12 +132,20 @@ class DiscretizedQAgent(TDAgent):
 		idx = np.argmax(q_vals.numpy())
 		return self.actions_mat[idx,:]
 
+	def get_action_index(self, a):
+		diff = self.actions_mat - a
+		s = np.sum(diff, axis = 1)
+		return np.argmin(s)
+
 	def copy_network_parameters(self):
 		self.target_network.load_state_dict(self.action_network.state_dict())
 
 	def update(self, s, a, r, sp):
-		# Update counter and push tuple to buffer
+		# Update counter
 		self.n_steps += 1
+
+		# Transform action triple into index in actios_mat and push to buffer
+		a = self.get_action_index(a)
 		self.buffer.push(s, a, r, sp)
 
 		# Proceed only if sufficient samples in the buffer
@@ -154,32 +154,38 @@ class DiscretizedQAgent(TDAgent):
 
 		# Sample from ER buffer
 		s, a, r, sp = self.buffer.sample()
-		a_idx = torch.from_numpy(self.get_action_indices(a))
 
 		# Forward pass to compute next state optimal Q-values
-		q_vals = self.target_network.forward(torch.from_numpy(sp).float())
-		opt_q_vals, opt_actions = torch.max(q_vals, dim = 1)
+		with torch.no_grad():
+			q_vals = self.target_network.forward(sp)
+		opt_q_vals, __ = torch.max(q_vals, dim = 1)
 
 		# Forward pass to compute Q-values of current states
-		cur_q_vals = self.action_network.forward(torch.from_numpy(s).float())
-		cur_q_vals = cur_q_vals.gather(1, a_idx.view(-1, 1))
+		cur_q_vals = self.action_network.forward(s)
+		cur_q_vals = cur_q_vals.gather(1, a.view(-1, 1))
+
+		# Compute TD target and loss
+		td_target = (r + self.discount_rate*opt_q_vals)
+		loss = F.mse_loss(td_target, cur_q_vals)
 
 		# Update training network
-		td_target = (torch.from_numpy(r).float() + self.discount_rate*opt_q_vals)
-		loss = F.smooth_l1_loss(td_target, cur_q_vals)
-
 		self.optimizer.zero_grad()
 		loss.backward()
-		for param in self.action_network.parameters():
-			param.grad.data.clamp_(-1, 1)
 		self.optimizer.step()
 
 		if (self.n_steps % self.tau == 0):
+			# Log model loss, avg. Q-value, and magnitude of gradient updates to Tensorboard
+			grad_mean = np.mean([torch.mean(torch.abs(x.grad.data)).numpy() for x in self.action_network.parameters()])
+			q_mean = torch.mean(cur_q_vals).numpy()
+			self.writer.add_scalar("actor_loss", loss, self.n_steps)
+			self.writer.add_scalar("avg_gradient_update_mag", grad_mean, self.n_steps)
+			self.writer.add_scalar("avg_current_q_value", q_mean, self.n_steps)
+
 			# Print debugging information if requested
 			if self.print_debug:
 				print("Network loss: {n:.{d}}".format(n = loss, d = 2))
-				grads = [torch.mean(x.grad.data).numpy() for x in self.action_network.parameters()]
-				print("Magnitude of gradient updates: {n:.{d}}".format(n = np.mean(grads), d = 2))
+				print("Avg. magnitude of gradient updates: {n:.{d}}".format(n = grad_mean, d = 2))
+				print("Avg. (current) q-value: {n:.{d}}".format(n = q_mean, d = 2))
 
 			# Update target network, anneal epsilon, and prune minibatch of old samples. 
 			# Arbitrarily we drop 10% of the buffer -- should tune this, but whatever...
@@ -200,4 +206,9 @@ class DiscretizedQAgent(TDAgent):
 			"eps_decay" : self.epsilon_decay, 
 			"tau" : self.tau
 		}
+		
+		# Assume that a model will always be saved before (forced) exit, meaning we 
+		# may close the object's log writer before pickling...
+		self.writer.close()
+
 		return output

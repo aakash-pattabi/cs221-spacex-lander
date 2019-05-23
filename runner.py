@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F 
 import torch.optim as optim
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 import pickle
 
 '''
@@ -115,6 +114,7 @@ if __name__ == "__main__":
 	side_thrust = np.linspace(-1, 1, 5)
 	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 8)
 
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	agent_config = {
 		"env" : env, 
 		"lr" : 1e-5, 
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 		}, 
 		"tau" : 5000, 
 		"optimizer" : torch.optim.Adam, 
-		"minibatch_size" : 64, 
+		"minibatch_size" : 32, 
 		"print_debug" : False, 
 		"device" : device
 	}
