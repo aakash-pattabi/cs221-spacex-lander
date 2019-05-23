@@ -120,7 +120,7 @@ class DiscretizedQAgent(TDAgent):
 		self.buffer = ReplayBuffer(1000, minibatch_size, self.device)
 
 		# Logger for TensorboardX
-		self.writer = SummaryWiter()
+		self.writer = SummaryWriter("runs/test")
 
 	def _init_actions(self):
 		self.actions_mat = three_cartesian_product(self.main_thrust_buckets, \
@@ -162,7 +162,7 @@ class DiscretizedQAgent(TDAgent):
 
 		# Forward pass to compute Q-values of current states
 		cur_q_vals = self.action_network.forward(s)
-		cur_q_vals = cur_q_vals.gather(1, a.view(-1, 1))
+		cur_q_vals = cur_q_vals.gather(1, a.view(-1, 1).long())
 
 		# Compute TD target and loss
 		td_target = (r + self.discount_rate*opt_q_vals)
@@ -175,8 +175,9 @@ class DiscretizedQAgent(TDAgent):
 
 		if (self.n_steps % self.tau == 0):
 			# Log model loss, avg. Q-value, and magnitude of gradient updates to Tensorboard
+			loss = loss.detach().numpy()
 			grad_mean = np.mean([torch.mean(torch.abs(x.grad.data)).numpy() for x in self.action_network.parameters()])
-			q_mean = torch.mean(cur_q_vals).numpy()
+			q_mean = torch.mean(cur_q_vals).detach().numpy()
 			self.writer.add_scalar("actor_loss", loss, self.n_steps)
 			self.writer.add_scalar("avg_gradient_update_mag", grad_mean, self.n_steps)
 			self.writer.add_scalar("avg_current_q_value", q_mean, self.n_steps)
@@ -206,7 +207,7 @@ class DiscretizedQAgent(TDAgent):
 			"eps_decay" : self.epsilon_decay, 
 			"tau" : self.tau
 		}
-		
+
 		# Assume that a model will always be saved before (forced) exit, meaning we 
 		# may close the object's log writer before pickling...
 		self.writer.close()

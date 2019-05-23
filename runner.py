@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
 	main_thrust = np.linspace(0, 1, 5)
 	side_thrust = np.linspace(-1, 1, 5)
-	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 8)
+	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 10)
 
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	agent_config = {
@@ -123,7 +123,7 @@ if __name__ == "__main__":
 		"epsilon_min" : 0.2, 
 		"epsilon_decay" : 1e-3, 
 		"predictor" : NNPredictor([300, 300, 300, 300, 300, 300], \
-			input_size = state_size, output_size = 5*5*8), 
+			input_size = state_size, output_size = 5*5*10), 
 		"disc_buckets" : {
 			"main_thrust" : main_thrust, 
 			"side_thrust" : side_thrust, 
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 		"mode" : "train", 
 		"num_episodes" : 100000, 
 		"render" : False, 
-		"verbose" : False, 
+		"verbose" : True, 
 		"print_every" : 100
 	}
 
