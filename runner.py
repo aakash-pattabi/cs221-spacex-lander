@@ -18,7 +18,7 @@ environment settings, and learning settings can be changed in the appropriate co
 '''
 class RocketRunner(object):
 	def __init__(self, env, agent, agent_config, mode, num_episodes, 
-		render, verbose, print_every):
+		render, verbose, print_every, checkpoint_every):
 		# Basic error-checking
 		assert mode in ["train", "test"]
 		assert print_every > 0
@@ -28,6 +28,7 @@ class RocketRunner(object):
 		self.render = render
 		self.verbose = verbose
 		self.print_every = print_every
+		self.checkpoint_every = checkpoint_every
 		self.env = env
 		self.episodic_returns, self.episodic_steps = [], []
 
@@ -70,11 +71,13 @@ class RocketRunner(object):
 							running_avg = np.mean(self.episodic_returns[-self.print_every:])
 							print("Episode #{}: Running mean over epoch {n:.{d}f}".format(episode, \
 									n = running_avg, d = 2))
-						try:
-							runner.save_model("./output/InitialTestNNAgentEpisode{}.pkl".format(episode))
-							runner.save_logs("./output/InitialTestNNEpisode{}.csv".format(episode))
-						except:
-							pass
+						
+						if (episode % self.checkpoint_every == 0) and (episode > 0):
+							try:
+								runner.save_model("./output/InitialTestNNAgentEpisode{}.pkl".format(episode))
+								runner.save_logs("./output/InitialTestNNEpisode{}.csv".format(episode))
+							except:
+								pass
 
 						break 
 
@@ -144,7 +147,8 @@ if __name__ == "__main__":
 		"num_episodes" : 100000, 
 		"render" : False, 
 		"verbose" : True, 
-		"print_every" : 100
+		"print_every" : 100, 
+		"checkpoint_every" : 100
 	}
 
 	runner = RocketRunner(**args)

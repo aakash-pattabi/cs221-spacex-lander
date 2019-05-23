@@ -93,6 +93,9 @@ class DiscretizedQAgent(TDAgent):
 				epsilon_start, epsilon_min, epsilon_decay, print_debug)
 
 		self.device = device
+		if self.device == torch.device("cuda"):
+			torch.set_default_tensor_type(torch.cuda.FloatTensor)
+
 		# Let the discretization buckets be tuples of values in sorted order that
 		# span the range (lb_val, ub_val) for each element val in an action 3-tuple. 
 		# Think of each element in a disc bucket tuple as the mean of its bucket
@@ -128,8 +131,8 @@ class DiscretizedQAgent(TDAgent):
 
 	def next_action(self, s):
 		with torch.no_grad():
-			q_vals = self.action_network.forward(torch.from_numpy(s).float())
-		idx = np.argmax(q_vals.numpy())
+			q_vals = self.action_network(torch.from_numpy(s).float().to(self.device))
+		idx = np.argmax(q_vals.cpu().numpy())
 		return self.actions_mat[idx,:]
 
 	def get_action_index(self, a):
@@ -157,11 +160,11 @@ class DiscretizedQAgent(TDAgent):
 
 		# Forward pass to compute next state optimal Q-values
 		with torch.no_grad():
-			q_vals = self.target_network.forward(sp)
+			q_vals = self.target_network(sp)
 		opt_q_vals, __ = torch.max(q_vals, dim = 1)
 
 		# Forward pass to compute Q-values of current states
-		cur_q_vals = self.action_network.forward(s)
+		cur_q_vals = self.action_network(s)
 		cur_q_vals = cur_q_vals.gather(1, a.view(-1, 1).long())
 
 		# Compute TD target and loss
@@ -175,9 +178,8 @@ class DiscretizedQAgent(TDAgent):
 
 		if (self.n_steps % self.tau == 0):
 			# Log model loss, avg. Q-value, and magnitude of gradient updates to Tensorboard
-			loss = loss.detach().numpy()
-			grad_mean = np.mean([torch.mean(torch.abs(x.grad.data)).numpy() for x in self.action_network.parameters()])
-			q_mean = torch.mean(cur_q_vals).detach().numpy()
+			grad_mean = torch.mean([torch.mean(torch.abs(x.grad.data)) for x in self.action_network.parameters()])
+			q_mean = torch.mean(cur_q_vals)
 			self.writer.add_scalar("actor_loss", loss, self.n_steps)
 			self.writer.add_scalar("avg_gradient_update_mag", grad_mean, self.n_steps)
 			self.writer.add_scalar("avg_current_q_value", q_mean, self.n_steps)
