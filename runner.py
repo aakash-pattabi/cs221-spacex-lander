@@ -21,8 +21,8 @@ class RocketRunner(object):
 	def __init__(self, env, agent, agent_config, mode, num_episodes, 
 		render, verbose, print_every):
 		# Basic error-checking
-		assert (mode in ["train", "test"])
-		assert(print_every > 0)
+		assert mode in ["train", "test"]
+		assert print_every > 0
 
 		self.train_mode = (mode == "train")
 		self.num_episodes = num_episodes
@@ -71,9 +71,12 @@ class RocketRunner(object):
 							running_avg = np.mean(self.episodic_returns[-self.print_every:])
 							print("Episode #{}: Running mean over epoch {n:.{d}f}".format(episode, \
 									n = running_avg, d = 2))
-							try:
-								runner.save_model("./output/InitialTestNNAgentEpisode{}.pkl".format(episode))
-								runner.save_logs("./output/InitialTestNNEpisode{}.csv".format(episode))
+						try:
+							runner.save_model("./output/InitialTestNNAgentEpisode{}.pkl".format(episode))
+							runner.save_logs("./output/InitialTestNNEpisode{}.csv".format(episode))
+						except:
+							pass
+
 						break 
 
 					s = sp
@@ -108,10 +111,9 @@ if __name__ == "__main__":
 	action_size = len(env.action_space)
 	state_size = env.state_size
 
-	n_buckets = 5
-	main_thrust = np.linspace(0, 1, n_buckets)
-	side_thrust = np.linspace(-1, 1, n_buckets)
-	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, n_buckets)
+	main_thrust = np.linspace(0, 1, 5)
+	side_thrust = np.linspace(-1, 1, 5)
+	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 8)
 
 	agent_config = {
 		"env" : env, 
@@ -120,8 +122,8 @@ if __name__ == "__main__":
 		"epsilon_start" : 0.9, 
 		"epsilon_min" : 0.2, 
 		"epsilon_decay" : 1e-3, 
-		"predictor" : NNPredictor([100, 100, 100, 100, 100, 100], \
-			input_size = state_size, output_size = n_buckets**3), 
+		"predictor" : NNPredictor([300, 300, 300, 300, 300, 300], \
+			input_size = state_size, output_size = 5*5*8), 
 		"disc_buckets" : {
 			"main_thrust" : main_thrust, 
 			"side_thrust" : side_thrust, 
