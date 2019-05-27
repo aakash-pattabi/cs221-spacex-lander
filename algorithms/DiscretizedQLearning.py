@@ -176,25 +176,25 @@ class DiscretizedQAgent(TDAgent):
 		loss.backward()
 		self.optimizer.step()
 
-		if (self.n_steps % self.tau == 0):
-			# Log model loss, avg. Q-value, and magnitude of gradient updates to Tensorboard
-			grad_mean = torch.mean([torch.mean(torch.abs(x.grad.data)) for x in self.action_network.parameters()])
-			q_mean = torch.mean(cur_q_vals)
-			self.writer.add_scalar("actor_loss", loss, self.n_steps)
-			self.writer.add_scalar("avg_gradient_update_mag", grad_mean, self.n_steps)
-			self.writer.add_scalar("avg_current_q_value", q_mean, self.n_steps)
+		# Log model loss, avg. Q-value, and magnitude of gradient updates to Tensorboard
+		grad_mean = torch.mean([torch.mean(torch.abs(x.grad.data)) for x in self.action_network.parameters()])
+		q_mean = torch.mean(opt_q_vals)
+		self.writer.add_scalar("actor_loss", loss, self.n_steps)
+		self.writer.add_scalar("avg_gradient_update_mag", grad_mean, self.n_steps)
+		self.writer.add_scalar("avg_sp_optimal_q_value", q_mean, self.n_steps)
 
+		if (self.n_steps % self.tau == 0):
 			# Print debugging information if requested
 			if self.print_debug:
 				print("Network loss: {n:.{d}}".format(n = loss, d = 2))
 				print("Avg. magnitude of gradient updates: {n:.{d}}".format(n = grad_mean, d = 2))
-				print("Avg. (current) q-value: {n:.{d}}".format(n = q_mean, d = 2))
+				print("Avg. (sp-optimal) q-value: {n:.{d}}".format(n = q_mean, d = 2))
 
 			# Update target network, anneal epsilon, and prune minibatch of old samples. 
-			# Arbitrarily we drop 10% of the buffer -- should tune this, but whatever...
+			# Arbitrarily we drop 50% of the buffer -- should tune this, but whatever...
 			self.copy_network_parameters()
 			self.anneal_epsilon()
-			self.buffer.clean(0.1)
+			self.buffer.clean(0.5)
 
 	def get_pickleable(self):
 		output = {

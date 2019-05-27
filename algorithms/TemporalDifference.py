@@ -15,7 +15,7 @@ class TDAgent(object):
 		self.epsilon_min = epsilon_min
 		self.epsilon_decay = epsilon_decay
 		self.print_debug = print_debug
-		self.sampler = RandomAgent(self.env)
+		self.sampler = RandomAgent()
 
 	def zero_epsilon(self):
 		self.epsilon = 0

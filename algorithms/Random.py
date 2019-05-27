@@ -6,8 +6,11 @@ sys.path.insert(0,parentdir)
 from rocket_lander.constants import * 
 
 class RandomAgent(object):
-	def __init__(self, env):
-		self.env = env
+	def __init__(self):
+		pass
+
+	def epsilon_greedy_action(self, s):
+		return self.next_action(s)
 
 	def next_action(self, s):
 		main_thrust = np.random.rand()
