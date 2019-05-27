@@ -14,7 +14,7 @@ import pickle
 Class: RocketRunner
 -------------------
 Manages test- and train-time simulations for the SpaceX rocket lander environment. Agents, 
-environment settings, and learning settings can be changed in the appropriate config files
+environment settings, and learning settings can be changed in the appropriate config dictionaries
 '''
 class RocketRunner(object):
 	def __init__(self, env, agent, agent_config, mode, num_episodes, 
@@ -113,26 +113,26 @@ if __name__ == "__main__":
 	action_size = len(env.action_space)
 	state_size = env.state_size
 
-	main_thrust = np.linspace(0, 1, 5)
-	side_thrust = np.linspace(-1, 1, 5)
+	main_thrust = np.linspace(0, 1, 6)
+	side_thrust = np.linspace(-1, 1, 6)
 	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 10)
 
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	agent_config = {
 		"env" : env, 
 		"lr" : 1e-5, 
-		"discount" : 0.95, 
-		"epsilon_start" : 0.9, 
+		"discount" : 0.99, 
+		"epsilon_start" : 0.95, 
 		"epsilon_min" : 0.2, 
 		"epsilon_decay" : 1e-3, 
 		"predictor" : NNPredictor([300, 300, 300, 300, 300, 300], \
-			input_size = state_size, output_size = 5*5*10), 
+			input_size = state_size, output_size = 6*6*10), 
 		"disc_buckets" : {
 			"main_thrust" : main_thrust, 
 			"side_thrust" : side_thrust, 
 			"nozzle" : nozzle
 		}, 
-		"tau" : 5000, 
+		"tau" : 10000, 
 		"optimizer" : torch.optim.Adam, 
 		"minibatch_size" : 32, 
 		"print_debug" : False, 
@@ -144,9 +144,9 @@ if __name__ == "__main__":
 		"agent" : DiscretizedQAgent, 
 		"agent_config" : agent_config, 
 		"mode" : "train", 
-		"num_episodes" : 100000, 
+		"num_episodes" : 1000000, 
 		"render" : False, 
-		"verbose" : True, 
+		"verbose" : False, 
 		"print_every" : 100, 
 		"checkpoint_every" : 100
 	}
