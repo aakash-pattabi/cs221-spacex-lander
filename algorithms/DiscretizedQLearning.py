@@ -1,4 +1,3 @@
-import numpy as np 
 import os, sys, inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -11,11 +10,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 import random
 from tensorboardX import SummaryWriter
-
-# Cartesian product of three np.arrays
-def three_cartesian_product(a, b, c): 
-	out = np.array(np.meshgrid(a, b, c)).T.reshape((-1, 3))
-	return out
 
 '''
 Class: ReplayBuffer
@@ -50,37 +44,6 @@ class ReplayBuffer(object):
 		self.size -= drop
 
 '''
-Class: PrioritizedReplayBuffer
-'''
-class PrioritizedReplayBuffer(ReplayBuffer):
-	def __init__(self, warmup, minibatch_size, device):
-		super().__init__(warmup, minibatch_size, device)
-		self.priorities = []
-
-	def push(self, s, a, r, sp):
-		self.buffer.append([s, a, r, sp])
-		self.priorities.append(r)
-		self.size += 1
-
-	def sample(self):
-		p = np.array(self.priorities)
-		p += np.max(np.abs(p))
-		p /= np.sum(p)
-		indices = np.random.choice(self.size, size = self.minibatch_size, p = p)
-		tuples = [self.buffer[i] for i in indices]
-		s = torch.Tensor([tuples[i][0] for i in range(self.minibatch_size)], device = self.device)
-		a = torch.Tensor([tuples[i][1] for i in range(self.minibatch_size)], device = self.device)
-		r = torch.Tensor([tuples[i][2] for i in range(self.minibatch_size)], device = self.device)
-		sp = torch.Tensor([tuples[i][3] for i in range(self.minibatch_size)], device = self.device)
-		return s, a, r, sp
-
-	def clean(self, drop):
-		drop = int(drop*len(self.buffer))
-		self.buffer = self.buffer[drop:]
-		self.priorities = self.priorities[drop:]
-		self.size -= drop
-
-'''
 Class: DiscretizedQAgent
 
 Implements a DQN with fixed Q-targets using neural network function approximators. 
@@ -88,20 +51,13 @@ Implements a DQN with fixed Q-targets using neural network function approximator
 class DiscretizedQAgent(TDAgent):
 	def __init__(self, env, lr, discount, \
 			epsilon_start, epsilon_min, epsilon_decay, print_debug, \
-			disc_buckets, predictor, tau, optimizer, minibatch_size, device):
+			predictor, tau, optimizer, minibatch_size, device):
 		super().__init__(env, lr, discount, \
 				epsilon_start, epsilon_min, epsilon_decay, print_debug)
 
 		self.device = device
 		if self.device == torch.device("cuda"):
 			torch.set_default_tensor_type(torch.cuda.FloatTensor)
-
-		# Let the discretization buckets be tuples of values in sorted order that
-		# span the range (lb_val, ub_val) for each element val in an action 3-tuple. 
-		# Think of each element in a disc bucket tuple as the mean of its bucket
-		self.main_thrust_buckets = np.array(disc_buckets["main_thrust"])
-		self.side_thrust_buckets = np.array(disc_buckets["side_thrust"])
-		self.nozzle_buckets = np.array(disc_buckets["nozzle"])
 
 		# Function appoximators
 		self.action_network = predictor.to(self.device)
@@ -114,10 +70,6 @@ class DiscretizedQAgent(TDAgent):
 		self.minibatch_size = minibatch_size
 		self.optimizer = optimizer(self.action_network.parameters(), lr = self.lr)
 
-		# Interpretable mapping of action indices to 3-tuple actions
-		self.actions_mat = None
-		self._init_actions()
-
 		# Data and counting variables
 		self.n_steps = 0
 		self.buffer = ReplayBuffer(1000, minibatch_size, self.device)
@@ -125,20 +77,11 @@ class DiscretizedQAgent(TDAgent):
 		# Logger for TensorboardX
 		self.writer = SummaryWriter("runs/test")
 
-	def _init_actions(self):
-		self.actions_mat = three_cartesian_product(self.main_thrust_buckets, \
-			self.side_thrust_buckets, self.nozzle_buckets)
-
 	def next_action(self, s):
 		with torch.no_grad():
-			q_vals = self.action_network(torch.from_numpy(s).float().to(self.device))
-		idx = np.argmax(q_vals.cpu().numpy())
-		return self.actions_mat[idx,:]
-
-	def get_action_index(self, a):
-		diff = self.actions_mat - a
-		s = np.sum(diff, axis = 1)
-		return np.argmin(s)
+			x = self.action_network(torch.from_numpy(s).float().to(self.device))
+		actions, __ = self.action_network.get_actions(x)
+		return actions.squeeze().numpy()
 
 	def copy_network_parameters(self):
 		self.target_network.load_state_dict(self.action_network.state_dict())
@@ -148,7 +91,6 @@ class DiscretizedQAgent(TDAgent):
 		self.n_steps += 1
 
 		# Transform action triple into index in actios_mat and push to buffer
-		a = self.get_action_index(a)
 		self.buffer.push(s, a, r, sp)
 
 		# Proceed only if sufficient samples in the buffer
@@ -160,16 +102,16 @@ class DiscretizedQAgent(TDAgent):
 
 		# Forward pass to compute next state optimal Q-values
 		with torch.no_grad():
-			q_vals = self.target_network(sp)
-		opt_q_vals, __ = torch.max(q_vals, dim = 1)
+			x = self.target_network(sp)
+		__, opt_q_vals = self.target_network.get_actions(x)
 
 		# Forward pass to compute Q-values of current states
-		cur_q_vals = self.action_network(s)
-		cur_q_vals = cur_q_vals.gather(1, a.view(-1, 1).long())
+		x = self.action_network(s)
+		cur_q_vals = self.action_network.get_q_val_for_actions(x, a)
 
 		# Compute TD target and loss
 		td_target = (r + self.discount_rate*opt_q_vals)
-		loss = F.mse_loss(td_target, cur_q_vals)
+		loss = F.smooth_l1_loss(cur_q_vals, td_target)
 
 		# Update training network
 		self.optimizer.zero_grad()
@@ -200,7 +142,6 @@ class DiscretizedQAgent(TDAgent):
 		output = {
 			"action_network" : self.action_network.state_dict(), 
 			"target_network" : self.target_network.state_dict(), 
-			"actions_mat" : self.actions_mat,
 			"n_steps" : self.n_steps, 
 			"lr" : self.lr, 
 			"discount_rate" : self.discount_rate, 

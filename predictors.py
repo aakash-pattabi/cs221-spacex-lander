@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F 
 import torch.optim as optim
 from collections import OrderedDict
-import numpy as np
 
 class LinearPredictor(nn.Module):
 	def __init__(self, state_size, action_size):
@@ -36,7 +35,8 @@ elements in the action vector, how many buckets over which to discretize its val
 values in the dictionary may be vectors of the discretized "pivot" points, to make indexing / 
 action-creation easier...
 
-Different actions may be discretized differently, which is where the challenge comes from
+Different actions may be discretized differently, which is where the challenge comes from. 
+Finally, make sure that [action_buckets] has _torch_ tensors as its values, not _numpy_ ones
 '''
 class DiscQLPredictor(NNPredictor):
 	def __init__(self, hidden_layers, input_size, action_buckets):
@@ -48,16 +48,28 @@ class DiscQLPredictor(NNPredictor):
 		self.keys = [k for k in action_buckets.keys()]
 		self.action_buckets = action_buckets
 
-		print(self.act_idx)
-		print(self.keys)
-		print(self.action_buckets)
-
+	# [x] is the output of a forward pass
 	def get_actions(self, x):
 		x = x.view(-1, self.output_size)
-		actions = np.zeros((len(x), self.action_length))
+		actions = torch.zeros((len(x), self.action_length))
 		q_vals = torch.zeros(len(x))
 		for i in range(len(self.act_idx) - 1):
 			maxs, indices = x[:,self.act_idx[i]:self.act_idx[i+1]].max(dim = 1)
-			actions[:,i] = np.take(self.action_buckets[self.keys[i]], indices)
+			actions[:,i] = self.action_buckets[self.keys[i]][indices]
 			q_vals += maxs
 		return actions, q_vals
+
+	# [x] is the output of a forward pass
+	def get_q_val_for_actions(self, x, a):
+		a = a.view(-1, self.action_length)
+		b = torch.zeros_like(a)
+		q_vals = torch.zeros(len(x))
+		i = 0
+		for k, v in self.action_buckets.items():
+			tmp = torch.abs(a[:,i].view(-1, 1) - v)
+			__, indices = tmp.min(dim = 1)
+			indices += self.act_idx[i]
+			b[:,i] = indices
+			i += 1
+		b = b.long()
+		return x.gather(1, b).sum(dim = 1)

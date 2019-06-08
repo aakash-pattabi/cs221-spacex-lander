@@ -113,9 +113,11 @@ if __name__ == "__main__":
 	action_size = len(env.action_space)
 	state_size = env.state_size
 
-	main_thrust = np.linspace(0, 1, 6)
-	side_thrust = np.linspace(-1, 1, 6)
-	nozzle = np.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 10)
+	disc_buckets = {
+		"main_thrust" : torch.linspace(0, 1, 10), 
+		"side_thrust" : torch.linspace(-1, 1, 10), 
+		"nozzle" : torch.linspace(-NOZZLE_ANGLE_LIMIT,NOZZLE_ANGLE_LIMIT, 10)
+	}
 
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	agent_config = {
@@ -125,13 +127,7 @@ if __name__ == "__main__":
 		"epsilon_start" : 0.95, 
 		"epsilon_min" : 0.2, 
 		"epsilon_decay" : 1e-3, 
-		"predictor" : NNPredictor([300, 300, 300, 300, 300, 300], \
-			input_size = state_size, output_size = 6*6*10), 
-		"disc_buckets" : {
-			"main_thrust" : main_thrust, 
-			"side_thrust" : side_thrust, 
-			"nozzle" : nozzle
-		}, 
+		"predictor" : DiscQLPredictor([64, 64, 64, 48, 32, 32, 32], state_size, disc_buckets),
 		"tau" : 10000, 
 		"optimizer" : torch.optim.Adam, 
 		"minibatch_size" : 32, 
@@ -146,7 +142,7 @@ if __name__ == "__main__":
 		"mode" : "train", 
 		"num_episodes" : 1000000, 
 		"render" : False, 
-		"verbose" : False, 
+		"verbose" : True, 
 		"print_every" : 100, 
 		"checkpoint_every" : 100
 	}
