@@ -177,7 +177,7 @@ class DiscretizedQAgent(TDAgent):
 		self.optimizer.step()
 
 		# Log model loss, avg. Q-value, and magnitude of gradient updates to Tensorboard
-		grad_mean = torch.mean([torch.mean(torch.abs(x.grad.data)) for x in self.action_network.parameters()])
+		grad_mean = torch.mean(torch.Tensor([torch.mean(torch.abs(x.grad.data)) for x in self.action_network.parameters()]))
 		q_mean = torch.mean(opt_q_vals)
 		self.writer.add_scalar("actor_loss", loss, self.n_steps)
 		self.writer.add_scalar("avg_gradient_update_mag", grad_mean, self.n_steps)

@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F 
 import torch.optim as optim
+from collections import OrderedDict
+import numpy as np
 
 class LinearPredictor(nn.Module):
 	def __init__(self, state_size, action_size):
@@ -27,3 +29,35 @@ class NNPredictor(nn.Module):
 			x = F.relu(x)
 		x = self.layers[-1](x)
 		return x
+
+'''
+Let [action_buckets] be an ordered dictionary specifying for each of the plausible 
+elements in the action vector, how many buckets over which to discretize its values. The 
+values in the dictionary may be vectors of the discretized "pivot" points, to make indexing / 
+action-creation easier...
+
+Different actions may be discretized differently, which is where the challenge comes from
+'''
+class DiscQLPredictor(NNPredictor):
+	def __init__(self, hidden_layers, input_size, action_buckets):
+		self.action_length = len(action_buckets)
+		self.output_size = sum([len(v) for k, v in action_buckets.items()])
+		super().__init__(hidden_layers, input_size, self.output_size)
+		num_buckets_per_action = [0] + [len(v) for k, v in action_buckets.items()]
+		self.act_idx = torch.cumsum(torch.Tensor(num_buckets_per_action), dim = 0).int()
+		self.keys = [k for k in action_buckets.keys()]
+		self.action_buckets = action_buckets
+
+		print(self.act_idx)
+		print(self.keys)
+		print(self.action_buckets)
+
+	def get_actions(self, x):
+		x = x.view(-1, self.output_size)
+		actions = np.zeros((len(x), self.action_length))
+		q_vals = torch.zeros(len(x))
+		for i in range(len(self.act_idx) - 1):
+			maxs, indices = x[:,self.act_idx[i]:self.act_idx[i+1]].max(dim = 1)
+			actions[:,i] = np.take(self.action_buckets[self.keys[i]], indices)
+			q_vals += maxs
+		return actions, q_vals
