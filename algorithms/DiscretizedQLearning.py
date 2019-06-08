@@ -75,7 +75,7 @@ class DiscretizedQAgent(TDAgent):
 		self.buffer = ReplayBuffer(1000, minibatch_size, self.device)
 
 		# Logger for TensorboardX
-		self.writer = SummaryWriter("runs/test")
+		self.writer = SummaryWriter("runs/smaller_dqn_test")
 
 	def next_action(self, s):
 		with torch.no_grad():
